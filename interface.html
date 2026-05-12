@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SiteGuard — Construction Safety Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════
+   RESET & VARIABLES
+═══════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #07090c;
+  --bg2:         #0c1017;
+  --bg3:         #111820;
+  --bg4:         #161f29;
+  --border:      #1a2a38;
+  --border-hi:   #254057;
+  --text:        #c0d4e4;
+  --text-dim:    #3d5870;
+  --text-mid:    #7a9bb5;
+  --accent:      #00c8ff;
+  --accent-dim:  rgba(0,200,255,0.12);
+  --accent-glow: rgba(0,200,255,0.25);
+  --danger:      #ff3535;
+  --danger-dim:  rgba(255,53,53,0.12);
+  --danger-glow: rgba(255,53,53,0.3);
+  --safe:        #00e87a;
+  --safe-dim:    rgba(0,232,122,0.1);
+  --warn:        #ffaa00;
+  --warn-dim:    rgba(255,170,0,0.1);
+  --mono:        'Share Tech Mono', monospace;
+  --sans:        'Barlow Condensed', sans-serif;
+  --radius:      4px;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text);
+  font-family: var(--sans); overflow: hidden; }
+
+/* ═══════════════════════════════════════════════════
+   PAGE SYSTEM  (login vs dashboard)
+═══════════════════════════════════════════════════ */
+.page { position: fixed; inset: 0; transition: opacity 0.4s, transform 0.4s; }
+.page.hidden { opacity: 0; pointer-events: none; transform: translateY(-12px); }
+
+/* ═══════════════════════════════════════════════════
+   LOGIN PAGE
+═══════════════════════════════════════════════════ */
+#page-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* animated grid background */
+#page-login::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  opacity: 0.5;
+  animation: grid-drift 20s linear infinite;
+}
+@keyframes grid-drift { to { transform: translateY(48px); } }
+
+/* radial vignette over grid */
+#page-login::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 70% at 50% 50%,
+    transparent 40%, var(--bg) 100%);
+}
+
+.login-card {
+  position: relative;
+  z-index: 2;
+  width: 380px;
+  background: var(--bg2);
+  border: 1px solid var(--border-hi);
+  border-radius: 6px;
+  padding: 40px 36px 36px;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,200,255,0.06);
+  animation: card-in 0.6s cubic-bezier(0.22,1,0.36,1) both;
+}
+@keyframes card-in {
+  from { opacity:0; transform: translateY(24px) scale(0.97); }
+  to   { opacity:1; transform: none; }
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.login-icon {
+  width: 40px; height: 40px;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 20px var(--accent-glow);
+  flex-shrink: 0;
+}
+.login-icon svg { width: 20px; height: 20px; color: var(--accent); }
+.login-brand-text { line-height: 1; }
+.login-brand-text .name {
+  font-family: var(--sans); font-weight: 900; font-size: 22px;
+  letter-spacing: 4px; text-transform: uppercase; color: var(--text);
+}
+.login-brand-text .name span { color: var(--accent); }
+.login-brand-text .sub {
+  font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+  letter-spacing: 2px; margin-top: 3px;
+}
+
+.login-title {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 3px;
+  color: var(--text-dim); text-transform: uppercase; margin-bottom: 20px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.field label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+  color: var(--text-dim); text-transform: uppercase;
+}
+.field input {
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 14px;
+  padding: 10px 12px; border-radius: var(--radius); outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.login-err {
+  font-family: var(--mono); font-size: 11px; color: var(--danger);
+  letter-spacing: 1px; min-height: 16px; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+
+.btn-login {
+  width: 100%; padding: 12px;
+  background: transparent; border: 1px solid var(--accent);
+  color: var(--accent); font-family: var(--sans); font-weight: 700;
+  font-size: 14px; letter-spacing: 4px; text-transform: uppercase;
+  border-radius: var(--radius); cursor: pointer;
+  transition: all 0.2s; position: relative; overflow: hidden;
+}
+.btn-login::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--accent); opacity: 0; transition: opacity 0.2s;
+}
+.btn-login:hover::before { opacity: 0.08; }
+.btn-login:hover { box-shadow: 0 0 24px var(--accent-glow); }
+.btn-login:active { transform: scale(0.99); }
+.btn-login.loading { opacity: 0.6; pointer-events: none; }
+
+/* ═══════════════════════════════════════════════════
+   DASHBOARD LAYOUT
+═══════════════════════════════════════════════════ */
+#page-dash {
+  display: grid;
+  grid-template-rows: 52px 1fr;
+  grid-template-columns: 1fr 340px;
+  height: 100vh;
+}
+
+/* ── Header ── */
+header {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 18px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  position: relative; overflow: hidden;
+}
+header::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.3;
+}
+.brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.brand-icon {
+  width: 26px; height: 26px; border: 2px solid var(--accent);
+  border-radius: 3px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.brand-icon svg { width: 14px; height: 14px; color: var(--accent); }
+.brand-name {
+  font-family: var(--sans); font-weight: 900; font-size: 15px;
+  letter-spacing: 3px; text-transform: uppercase;
+}
+.brand-name span { color: var(--accent); }
+
+.hstats {
+  display: flex; align-items: center; gap: 6px; margin-left: 10px; flex: 1;
+}
+.hstat {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 12px; background: var(--bg3);
+  border: 1px solid var(--border); border-radius: 3px;
+  font-family: var(--mono); font-size: 11px;
+}
+.hstat .lbl { color: var(--text-dim); letter-spacing: 1px; }
+.hstat .val { color: var(--accent); min-width: 26px; text-align: right; transition: color 0.3s; }
+.hstat.v .val { color: var(--danger); }
+.hstat.p .val { color: var(--safe); }
+.hstat.s .val { color: var(--warn); }
+
+.hright { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+.pill {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 12px; border-radius: 3px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; border: 1px solid var(--border);
+  background: var(--bg3); transition: all 0.3s;
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); transition: all 0.3s; }
+.pill.on  { border-color: var(--safe); background: var(--safe-dim); }
+.pill.on .dot { background: var(--safe); box-shadow: 0 0 8px var(--safe); animation: blink 1.4s infinite; }
+.pill.alert { border-color: var(--danger); background: var(--danger-dim); }
+.pill.alert .dot { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: blink 0.6s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.btn-logout {
+  padding: 5px 12px; background: transparent;
+  border: 1px solid var(--border); color: var(--text-dim);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; border-radius: 3px; cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-logout:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ── Feed panel ── */
+.feed-wrap {
+  background: #000; position: relative;
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+}
+.feed-wrap::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,200,255,0.015) 2px, rgba(0,200,255,0.015) 4px);
+}
+#feed { width: 100%; height: 100%; object-fit: contain; display: block; z-index: 1; }
+
+.no-feed {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  color: var(--text-dim);
+}
+.no-feed svg { width: 44px; height: 44px; opacity: 0.25; }
+.no-feed p { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; }
+
+.corner { position: absolute; width: 20px; height: 20px; z-index: 3; pointer-events: none; }
+.corner.tl { top:12px; left:12px;  border-top:2px solid var(--accent); border-left:2px solid var(--accent); }
+.corner.tr { top:12px; right:12px; border-top:2px solid var(--accent); border-right:2px solid var(--accent); }
+.corner.bl { bottom:12px; left:12px;  border-bottom:2px solid var(--accent); border-left:2px solid var(--accent); }
+.corner.br { bottom:12px; right:12px; border-bottom:2px solid var(--accent); border-right:2px solid var(--accent); }
+
+.vflash {
+  position: absolute; inset: 0; z-index: 4; pointer-events: none;
+  border: 3px solid var(--danger); box-shadow: inset 0 0 50px rgba(255,53,53,0.2);
+  opacity: 0;
+}
+.vflash.go { animation: flash-anim 0.7s ease-out forwards; }
+@keyframes flash-anim { 0%{opacity:1} 100%{opacity:0} }
+
+.feed-tag {
+  position: absolute; bottom:12px; right:12px; z-index:3;
+  font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+  background: rgba(7,9,12,0.75); padding: 3px 8px; border-radius: 2px;
+  letter-spacing: 1px; display: none;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  background: var(--bg2); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* block */
+.block { padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.block-hd {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 3px;
+  color: var(--text-dim); text-transform: uppercase; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.block-hd::after { content:''; flex:1; height:1px; background: var(--border); }
+
+/* upload zone */
+.upload-zone {
+  border: 1.5px dashed var(--border-hi); border-radius: var(--radius);
+  padding: 18px 12px; text-align: center; cursor: pointer;
+  transition: all 0.25s; position: relative; overflow: hidden;
+  background: var(--bg3); margin-bottom: 10px;
+}
+.upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: var(--accent-dim); }
+.upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.upload-icon { font-size: 22px; margin-bottom: 6px; }
+.upload-label { font-family: var(--mono); font-size: 11px; color: var(--text-mid); letter-spacing: 1px; }
+.upload-hint  { font-family: var(--mono); font-size: 9px; color: var(--text-dim);
+  letter-spacing: 1px; margin-top: 3px; }
+
+.upload-progress {
+  height: 3px; background: var(--border); border-radius: 2px;
+  margin-bottom: 8px; overflow: hidden; display: none;
+}
+.upload-progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+
+.file-chosen {
+  font-family: var(--mono); font-size: 11px; color: var(--safe);
+  letter-spacing: 1px; margin-bottom: 10px; display: none;
+  align-items: center; gap: 6px; padding: 6px 10px;
+  background: var(--safe-dim); border: 1px solid rgba(0,232,122,0.2);
+  border-radius: var(--radius);
+}
+
+/* conf row */
+.conf-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.conf-row label { font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+  letter-spacing: 2px; text-transform: uppercase; white-space: nowrap; }
+.conf-row input {
+  flex: 1; background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 13px;
+  padding: 7px 10px; border-radius: var(--radius); outline: none;
+  transition: border-color 0.2s;
+}
+.conf-row input:focus { border-color: var(--accent); }
+
+/* action buttons */
+.btn-row { display: flex; gap: 8px; }
+.btn {
+  flex:1; padding: 9px; border: 1px solid; border-radius: var(--radius);
+  font-family: var(--sans); font-weight: 700; font-size: 13px;
+  letter-spacing: 2px; text-transform: uppercase; cursor: pointer;
+  transition: all 0.2s; background: transparent;
+}
+.btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-go   { border-color: var(--safe);   color: var(--safe); }
+.btn-go:not(:disabled):hover   { box-shadow: 0 0 16px var(--safe-dim); }
+.btn-stop { border-color: var(--danger); color: var(--danger); }
+.btn-stop:not(:disabled):hover { box-shadow: 0 0 16px var(--danger-dim); }
+.btn-clear { border-color: var(--border-hi); color: var(--text-dim); font-size: 11px; }
+.btn-clear:not(:disabled):hover { border-color: var(--warn); color: var(--warn); }
+
+/* stat cards */
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.card {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px;
+  position: relative; overflow: hidden;
+}
+.card::before { content:''; position:absolute; top:0;left:0; width:3px; height:100%; background: var(--accent); }
+.card.c-safe::before   { background: var(--safe); }
+.card.c-danger::before { background: var(--danger); }
+.card.c-warn::before   { background: var(--warn); }
+.card-lbl { font-family: var(--mono); font-size: 9px; letter-spacing:2px; color: var(--text-dim); margin-bottom: 4px; }
+.card-val { font-family: var(--mono); font-size: 26px; line-height:1; color: var(--accent); transition: color 0.3s; }
+.card.c-safe .card-val   { color: var(--safe); }
+.card.c-danger .card-val { color: var(--danger); }
+.card.c-warn .card-val   { color: var(--warn); }
+#uptime { font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+  text-align: center; padding: 8px 0 0; letter-spacing:2px; }
+
+/* tabs */
+.tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+.tab {
+  flex:1; padding: 10px 8px; background: none; border: none;
+  border-bottom: 2px solid transparent; color: var(--text-dim);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; cursor: pointer; transition: all 0.2s;
+}
+.tab:hover { color: var(--text); }
+.tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+
+.panel { flex:1; overflow-y:auto; display:none; }
+.panel.on { display:block; }
+.panel::-webkit-scrollbar { width: 4px; }
+.panel::-webkit-scrollbar-track { background: var(--bg2); }
+.panel::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+/* snapshots */
+.snap-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:10px; }
+.snap {
+  position:relative; border-radius:3px; overflow:hidden;
+  border:1px solid var(--border); aspect-ratio:16/9; background:#000;
+  cursor:pointer; transition: border-color 0.2s;
+}
+.snap:hover { border-color: var(--accent); }
+.snap img { width:100%; height:100%; object-fit:cover; display:block; }
+.snap-ts {
+  position:absolute; bottom:0; left:0; right:0;
+  background: rgba(0,0,0,0.8); font-family: var(--mono);
+  font-size:9px; color: var(--danger); padding:3px 5px; letter-spacing:1px;
+}
+.empty {
+  grid-column: 1/-1; padding:28px; text-align:center;
+  font-family: var(--mono); font-size:11px; color: var(--text-dim); letter-spacing:1px;
+}
+
+/* log */
+.log-wrap { padding: 8px; display:flex; flex-direction:column; gap:3px; }
+.log-line {
+  font-family: var(--mono); font-size: 10px; padding: 6px 10px;
+  background: var(--bg3); border-left: 2px solid var(--danger);
+  color: var(--text-dim); letter-spacing: 0.5px; line-height: 1.5;
+  border-radius: 0 2px 2px 0; animation: sli 0.2s ease-out;
+}
+.log-line .ts { color: var(--warn); margin-right: 6px; }
+@keyframes sli { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:none} }
+
+/* lightbox */
+.lb {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9);
+  z-index:200; align-items:center; justify-content:center; backdrop-filter:blur(6px);
+}
+.lb.on { display:flex; }
+.lb img { max-width:90vw; max-height:90vh; border:1px solid var(--border-hi);
+  box-shadow: 0 0 80px rgba(0,0,0,0.9); border-radius:3px; }
+.lb-x {
+  position:absolute; top:18px; right:22px; background:none; border:none;
+  color: var(--text-dim); font-size:22px; cursor:pointer; transition:color 0.2s;
+}
+.lb-x:hover { color: var(--text); }
+
+/* toast */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--bg3); border: 1px solid var(--border-hi);
+  color: var(--text); font-family: var(--mono); font-size: 12px;
+  letter-spacing: 1px; padding: 10px 20px; border-radius: var(--radius);
+  z-index: 300; opacity: 0; transition: opacity 0.3s;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.toast.show { opacity: 1; }
+.toast.ok  { border-color: var(--safe);   color: var(--safe); }
+.toast.err { border-color: var(--danger); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     LOGIN PAGE
+════════════════════════════════════════════════════ -->
+<div class="page" id="page-login">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="10" cy="10" r="7"/>
+          <path d="M10 4v3M10 13v3M4 10h3M13 10h3"/>
+          <circle cx="10" cy="10" r="2" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="login-brand-text">
+        <div class="name">SITE<span>GUARD</span></div>
+        <div class="sub">Construction Safety Monitor</div>
+      </div>
+    </div>
+
+    <div class="login-title">Operator Authentication</div>
+
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="l-user" placeholder="Enter username" autocomplete="username"
+             onkeydown="if(event.key==='Enter') doLogin()"/>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="l-pass" placeholder="Enter password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') doLogin()"/>
+    </div>
+
+    <div class="login-err" id="l-err"></div>
+
+    <button class="btn-login" id="btn-login" onclick="doLogin()">
+      ▶ &nbsp; ACCESS SYSTEM
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     DASHBOARD PAGE
+════════════════════════════════════════════════════ -->
+<div class="page hidden" id="page-dash">
+
+  <!-- header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="10" cy="10" r="7"/>
+          <path d="M10 4v3M10 13v3M4 10h3M13 10h3"/>
+          <circle cx="10" cy="10" r="2" fill="currentColor"/>
+        </svg>
+      </div>
+      <span class="brand-name">SITE<span>GUARD</span></span>
+    </div>
+
+    <div class="hstats">
+      <div class="hstat">
+        <span class="lbl">FPS</span><span class="val" id="h-fps">—</span>
+      </div>
+      <div class="hstat p">
+        <span class="lbl">PERSONS</span><span class="val" id="h-pers">0</span>
+      </div>
+      <div class="hstat v">
+        <span class="lbl">VIOLATIONS</span><span class="val" id="h-viol">0</span>
+      </div>
+      <div class="hstat s">
+        <span class="lbl">SESSION</span><span class="val" id="h-sess">0</span>
+      </div>
+    </div>
+
+    <div class="hright">
+      <div class="pill" id="pill"><div class="dot"></div><span id="pill-txt">OFFLINE</span></div>
+      <button class="btn-logout" onclick="doLogout()">LOGOUT</button>
+    </div>
+  </header>
+
+  <!-- feed -->
+  <div class="feed-wrap">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="vflash" id="vflash"></div>
+    <div class="feed-tag" id="feed-tag"></div>
+
+    <div class="no-feed" id="no-feed">
+      <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="4" y="12" width="40" height="28" rx="3"/>
+        <circle cx="24" cy="26" r="7"/>
+        <path d="M18 12V8h12v4"/>
+        <circle cx="24" cy="26" r="2.5" fill="currentColor"/>
+      </svg>
+      <p>UPLOAD A VIDEO TO BEGIN</p>
+    </div>
+    <img id="feed" src="" alt="" style="display:none"/>
+  </div>
+
+  <!-- sidebar -->
+  <aside class="sidebar">
+
+    <!-- Upload -->
+    <div class="block">
+      <div class="block-hd">Video Source</div>
+
+      <div class="upload-zone" id="drop-zone"
+           ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="handleDrop(event)">
+        <input type="file" id="file-input" accept=".mp4,.avi,.mov,.mkv,.webm"
+               onchange="handleFileSelect(event)"/>
+        <div class="upload-icon">📹</div>
+        <div class="upload-label">Click or drag video here</div>
+        <div class="upload-hint">MP4 · AVI · MOV · MKV · WEBM</div>
+      </div>
+
+      <div class="upload-progress" id="up-prog">
+        <div class="upload-progress-bar" id="up-bar"></div>
+      </div>
+
+      <div class="file-chosen" id="file-chosen">
+        <span>✓</span><span id="file-name-display">—</span>
+      </div>
+
+      <div class="conf-row">
+        <label>Confidence</label>
+        <input type="number" id="conf" value="0.3" min="0.1" max="1.0" step="0.05"/>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-go"   id="btn-go"   onclick="startRun()" disabled>▶ START</button>
+        <button class="btn btn-stop" id="btn-stop" onclick="stopRun()"  disabled>■ STOP</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="block">
+      <div class="block-hd">Statistics</div>
+      <div class="cards">
+        <div class="card">
+          <div class="card-lbl">FPS</div>
+          <div class="card-val" id="c-fps">0</div>
+        </div>
+        <div class="card c-safe">
+          <div class="card-lbl">Persons</div>
+          <div class="card-val" id="c-pers">0</div>
+        </div>
+        <div class="card c-danger">
+          <div class="card-lbl">Violations</div>
+          <div class="card-val" id="c-viol">0</div>
+        </div>
+        <div class="card c-warn">
+          <div class="card-lbl">Session Total</div>
+          <div class="card-val" id="c-sess">0</div>
+        </div>
+      </div>
+      <div id="uptime">UPTIME — 00:00:00</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab on" onclick="switchTab('snaps',this)">Snapshots</button>
+      <button class="tab"    onclick="switchTab('log',this)">Event Log</button>
+    </div>
+
+    <div class="panel on" id="panel-snaps">
+      <div class="snap-grid" id="snap-grid">
+        <div class="empty">No violations captured yet</div>
+      </div>
+      <div style="padding:0 10px 10px;">
+        <button class="btn btn-clear" style="width:100%" onclick="clearData()">⊘ Clear Snapshots &amp; Log</button>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-log">
+      <div class="log-wrap" id="log-wrap">
+        <div class="empty" style="grid-column:auto">No events yet</div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<!-- Lightbox -->
+<div class="lb" id="lb" onclick="closeLb()">
+  <button class="lb-x" onclick="closeLb()">✕</button>
+  <img id="lb-img" src="" alt=""/>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════
+let uploadedFilename = null;
+let running          = false;
+let lastViol         = 0;
+let pollT = null, snapT = null, logT = null;
+
+// ═══════════════════════════════════════════════════
+//  Toast helper
+// ═══════════════════════════════════════════════════
+function toast(msg, type='ok', ms=2600) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = `toast ${type} show`;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// ═══════════════════════════════════════════════════
+//  Page switch
+// ═══════════════════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.toggle('hidden', p.id !== id);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  Login
+// ═══════════════════════════════════════════════════
+async function doLogin() {
+  const btn  = document.getElementById('btn-login');
+  const user = document.getElementById('l-user').value.trim();
+  const pass = document.getElementById('l-pass').value;
+  const err  = document.getElementById('l-err');
+
+  if (!user || !pass) { err.textContent = '⚠ Enter username and password'; return; }
+
+  btn.classList.add('loading');
+  btn.textContent = 'AUTHENTICATING…';
+  err.textContent = '';
+
+  try {
+    const res  = await fetch('/api/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username: user, password: pass})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showPage('page-dash');
+      toast('Access granted', 'ok');
+    } else {
+      err.textContent = '⚠ ' + (data.msg || 'Invalid credentials');
+      document.getElementById('l-pass').value = '';
+    }
+  } catch(e) {
+    err.textContent = '⚠ Server unreachable';
+  }
+
+  btn.classList.remove('loading');
+  btn.textContent = '▶ \u00a0 ACCESS SYSTEM';
+}
+
+// ═══════════════════════════════════════════════════
+//  Logout
+// ═══════════════════════════════════════════════════
+async function doLogout() {
+  stopRun();
+  await fetch('/api/logout', {method:'POST'});
+  uploadedFilename = null;
+  resetUploadUI();
+  showPage('page-login');
+  document.getElementById('l-user').value = '';
+  document.getElementById('l-pass').value = '';
+  document.getElementById('l-err').textContent = '';
+}
+
+// ═══════════════════════════════════════════════════
+//  File handling
+// ═══════════════════════════════════════════════════
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadFile(file);
+}
+
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) uploadFile(file);
+}
+
+async function uploadFile(file) {
+  // Basic client-side type check
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['mp4','avi','mov','mkv','webm'].includes(ext)) {
+    toast('Unsupported file type', 'err'); return;
+  }
+
+  // Show progress bar
+  const prog = document.getElementById('up-prog');
+  const bar  = document.getElementById('up-bar');
+  prog.style.display = 'block';
+  bar.style.width    = '0%';
+
+  const formData = new FormData();
+  formData.append('video', file);
+
+  try {
+    // Use XHR for upload progress
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/upload');
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable)
+          bar.style.width = Math.round(e.loaded / e.total * 100) + '%';
+      };
+      xhr.onload = () => {
+        const data = JSON.parse(xhr.responseText);
+        if (data.ok) {
+          uploadedFilename = data.filename;
+          showFileChosen(file.name);
+          document.getElementById('btn-go').disabled = false;
+          toast('Video uploaded: ' + file.name, 'ok');
+          resolve();
+        } else {
+          toast(data.msg || 'Upload failed', 'err');
+          reject();
+        }
+      };
+      xhr.onerror = () => { toast('Upload error', 'err'); reject(); };
+      xhr.send(formData);
+    });
+  } catch(e) { /* already toasted */ }
+
+  prog.style.display = 'none';
+  bar.style.width    = '0%';
+}
+
+function showFileChosen(name) {
+  const el = document.getElementById('file-chosen');
+  document.getElementById('file-name-display').textContent = name;
+  el.style.display = 'flex';
+}
+
+function resetUploadUI() {
+  uploadedFilename = null;
+  document.getElementById('file-chosen').style.display = 'none';
+  document.getElementById('file-name-display').textContent = '—';
+  document.getElementById('file-input').value = '';
+  document.getElementById('btn-go').disabled = true;
+}
+
+// ═══════════════════════════════════════════════════
+//  Pipeline control
+// ═══════════════════════════════════════════════════
+async function startRun() {
+  if (!uploadedFilename) { toast('Upload a video first', 'err'); return; }
+  if (running) return;
+
+  const conf = parseFloat(document.getElementById('conf').value) || 0.3;
+  const res  = await fetch('/api/start', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({filename: uploadedFilename, confidence: conf})
+  });
+  const data = await res.json();
+  if (!data.ok) { toast(data.msg, 'err'); return; }
+
+  running = true;
+  lastViol = 0;
+  document.getElementById('btn-go').disabled   = true;
+  document.getElementById('btn-stop').disabled = false;
+
+  // Start feed
+  const feed = document.getElementById('feed');
+  feed.src = '/video_feed';
+  feed.style.display = 'block';
+  document.getElementById('no-feed').style.display = 'none';
+  document.getElementById('feed-tag').style.display = 'block';
+
+  setPill('on', 'ACTIVE');
+  toast('Detection started', 'ok');
+
+  pollT = setInterval(pollStatus, 800);
+  snapT = setInterval(loadSnaps,  3000);
+  logT  = setInterval(loadLog,    3000);
+  loadSnaps(); loadLog();
+}
+
+async function stopRun() {
+  await fetch('/api/stop', {method:'POST'});
+  finishRun();
+}
+
+function finishRun() {
+  clearInterval(pollT); clearInterval(snapT); clearInterval(logT);
+  running = false;
+  document.getElementById('btn-go').disabled   = uploadedFilename === null;
+  document.getElementById('btn-stop').disabled = true;
+
+  const feed = document.getElementById('feed');
+  feed.src = ''; feed.style.display = 'none';
+  document.getElementById('no-feed').style.display = 'flex';
+  document.getElementById('feed-tag').style.display = 'none';
+
+  setPill('', 'OFFLINE');
+  loadSnaps(); loadLog();
+}
+
+// ═══════════════════════════════════════════════════
+//  Status pill
+// ═══════════════════════════════════════════════════
+function setPill(cls, txt) {
+  const pill = document.getElementById('pill');
+  pill.className = 'pill ' + cls;
+  document.getElementById('pill-txt').textContent = txt;
+}
+
+// ═══════════════════════════════════════════════════
+//  Poll
+// ═══════════════════════════════════════════════════
+function fmt2(n) { return String(n).padStart(2,'0'); }
+function fmtUp(s) {
+  return `UPTIME — ${fmt2(Math.floor(s/3600))}:${fmt2(Math.floor((s%3600)/60))}:${fmt2(s%60)}`;
+}
+
+async function pollStatus() {
+  try {
+    const data = await fetch('/api/status').then(r=>r.json());
+    const fps  = data.fps          ?? 0;
+    const pers = data.total_persons ?? 0;
+    const viol = data.violations    ?? 0;
+    const sess = data.session_total ?? 0;
+    const up   = data.uptime        ?? 0;
+
+    // header
+    document.getElementById('h-fps').textContent  = fps;
+    document.getElementById('h-pers').textContent = pers;
+    document.getElementById('h-viol').textContent = viol;
+    document.getElementById('h-sess').textContent = sess;
+    // cards
+    document.getElementById('c-fps').textContent  = fps;
+    document.getElementById('c-pers').textContent = pers;
+    document.getElementById('c-viol').textContent = viol;
+    document.getElementById('c-sess').textContent = sess;
+    // uptime / badge
+    document.getElementById('uptime').textContent   = fmtUp(up);
+    document.getElementById('feed-tag').textContent = fmtUp(up);
+
+    // alert flash
+    if (viol > 0) {
+      setPill('alert', 'VIOLATION');
+      if (viol !== lastViol) triggerFlash();
+    } else if (data.running) {
+      setPill('on', 'ACTIVE');
+    }
+    lastViol = viol;
+
+    if (!data.running && running) finishRun();
+  } catch(e) {}
+}
+
+function triggerFlash() {
+  const el = document.getElementById('vflash');
+  el.classList.remove('go');
+  void el.offsetWidth;
+  el.classList.add('go');
+}
+
+// ═══════════════════════════════════════════════════
+//  Snapshots
+// ═══════════════════════════════════════════════════
+async function loadSnaps() {
+  const files = await fetch('/api/snapshots').then(r=>r.json());
+  const grid  = document.getElementById('snap-grid');
+  if (!files.length) {
+    grid.innerHTML = '<div class="empty">No violations captured yet</div>';
+    return;
+  }
+  grid.innerHTML = files.map(f => {
+    const ts = f.replace('snap_','').replace('.jpg','').replace(/_/g,' ');
+    return `<div class="snap" onclick="openLb('/violations/${f}')">
+      <img src="/violations/${f}" loading="lazy"/>
+      <div class="snap-ts">${ts}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+//  Log
+// ═══════════════════════════════════════════════════
+async function loadLog() {
+  const lines = await fetch('/api/log').then(r=>r.json());
+  const wrap  = document.getElementById('log-wrap');
+  if (!lines.length) {
+    wrap.innerHTML = '<div class="empty" style="grid-column:auto">No events yet</div>';
+    return;
+  }
+  wrap.innerHTML = lines.map(l => {
+    const p   = l.split(' — ');
+    const ts  = p[0] || '';
+    const msg = p.slice(1).join(' — ');
+    return `<div class="log-line"><span class="ts">${ts}</span>${msg}</div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+//  Clear
+// ═══════════════════════════════════════════════════
+async function clearData() {
+  if (!confirm('Clear all violation snapshots and log?')) return;
+  await fetch('/api/clear_session_data', {method:'POST'});
+  toast('Data cleared', 'ok');
+  loadSnaps(); loadLog();
+}
+
+// ═══════════════════════════════════════════════════
+//  Tabs
+// ═══════════════════════════════════════════════════
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('panel-'+name).classList.add('on');
+}
+
+// ═══════════════════════════════════════════════════
+//  Lightbox
+// ═══════════════════════════════════════════════════
+function openLb(src) {
+  document.getElementById('lb-img').src = src;
+  document.getElementById('lb').classList.add('on');
+}
+function closeLb() { document.getElementById('lb').classList.remove('on'); }
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeLb(); });
+
+// ═══════════════════════════════════════════════════
+//  Init — check if already logged in (page refresh)
+// ═══════════════════════════════════════════════════
+(async () => {
+  try {
+    const res = await fetch('/api/status');
+    if (res.status === 401) { showPage('page-login'); }
+    else { showPage('page-dash'); loadSnaps(); loadLog(); }
+  } catch(e) { showPage('page-login'); }
+})();
+</script>
+</body>
+</html>
